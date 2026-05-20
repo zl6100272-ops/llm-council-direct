@@ -48,7 +48,7 @@ async def _query_openai_compatible(
     }
 
     # Enable reasoning/thinking for models that support it
-    if model_name.startswith("gpt-5") or model_name.startswith("gemini"):
+    if "gpt-5" in model_name or "reasoner" in model_name or "gemini" in model_name:
         payload["reasoning_effort"] = "high"
 
     async with httpx.AsyncClient(timeout=timeout) as client:
@@ -63,10 +63,11 @@ async def _query_openai_compatible(
 
         data = response.json()
         message = data["choices"][0]["message"]
+        content = message.get("content") or message.get("reasoning_content")
 
         return {
-            "content": message.get("content"),
-            "reasoning_details": message.get("reasoning_details"),
+            "content": content,
+            "reasoning_details": message.get("reasoning_details") or message.get("reasoning_content"),
         }
 
 

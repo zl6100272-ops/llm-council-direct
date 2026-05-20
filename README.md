@@ -1,86 +1,93 @@
-# LLM Council (Direct API Variant)
+# LLM Council Direct
 
 ![llmcouncil](header.jpg)
 
-This is a fork of [karpathy/llm-council](https://github.com/karpathy/llm-council) that **bypasses OpenRouter and calls AI providers directly**.
+这是一个基于 [karpathy/llm-council](https://github.com/karpathy/llm-council) 的直连厂商 API 版本。项目绕过 OpenRouter，直接调用国内外大模型厂商 API，支持通过 `backend/config.py` 自由配置任意模型，组成一个灵活的 3 阶段 LLM Council 审议系统。
 
-## Why bypass OpenRouter?
+## 核心特性
 
-The original repo routes all queries through [OpenRouter](https://openrouter.ai/), a paid proxy that sits between you and the AI providers. The problem: OpenRouter categorises every input using a hosted classifier model and uses that data to track and share user metrics — including on its public [Rankings page](https://openrouter.ai/rankings) — even when you disable logging in your account settings.
+- 支持 9 个国内外 Provider：OpenAI、Anthropic、Google、xAI、DeepSeek、通义千问、智谱清言、月之暗面 Kimi、阶跃星辰。
+- Council 模型列表灵活可配：用户只需要修改 `backend/config.py` 中的 `COUNCIL_MODELS` 和 `CHAIRMAN_MODEL`，无需改业务代码。
+- 3 阶段审议流程：独立回答 -> 盲审互评 -> 主席综合。
+- 直连厂商 API：请求从本机直接发送到对应 Provider，避免中间代理。
+- 支持 OpenAI-compatible 接口，同时保留 Anthropic Messages API 支持。
 
-This variant removes OpenRouter entirely. Your queries go straight from your machine to OpenAI, Anthropic, Google, and xAI with no middleman. You pay each provider directly at their standard API rates.
+## 支持的 Provider
 
-## What changed
+| Provider | 厂商 | API Key 环境变量 |
+|----------|------|-----------------|
+| openai | OpenAI | OPENAI_API_KEY |
+| anthropic | Anthropic | ANTHROPIC_API_KEY |
+| google | Google | GOOGLE_API_KEY |
+| xai | xAI | XAI_API_KEY |
+| deepseek | DeepSeek 深度求索 | DEEPSEEK_API_KEY |
+| qwen | 阿里通义千问 | QWEN_API_KEY |
+| glm | 智谱清言 | GLM_API_KEY |
+| moonshot | 月之暗面 Kimi | MOONSHOT_API_KEY |
+| stepfun | 阶跃星辰 | STEPFUN_API_KEY |
 
-Three backend files were modified. Zero frontend changes.
-
-| File | Change |
-|------|--------|
-| `.env` | Replaced single `OPENROUTER_API_KEY` with 4 provider keys |
-| `backend/config.py` | Provider registry mapping each prefix to its native API endpoint |
-| `backend/openrouter.py` | Routes requests to the correct provider API based on model prefix |
-
-## How it works
-
-The app groups multiple LLMs into a "Council" that collaboratively answers your questions in 3 stages:
-
-1. **Stage 1 — First opinions**: Your query goes to all council models in parallel. You can inspect each response individually.
-2. **Stage 2 — Peer review**: Each model receives the other models' responses (anonymized to prevent favoritism) and ranks them by accuracy and insight.
-3. **Stage 3 — Final answer**: A designated Chairman model synthesizes everything into a single comprehensive response.
-
-## Setup
-
-### 1. Install dependencies
-
-Requires [uv](https://docs.astral.sh/uv/) for Python and npm for the frontend.
+## 快速开始
 
 ```bash
+# 安装
 uv sync
 cd frontend && npm install && cd ..
-```
 
-### 2. Configure API keys
+# 配置 API Key（填入你有 Key 的厂商即可，不需要全部）
+cp .env.example .env
+nano .env
 
-Create a `.env` file in the project root with your provider keys:
+# 编辑 Council 模型列表（可选，默认已配好国内外混合）
+nano backend/config.py
 
-```
-OPENAI_API_KEY=sk-...
-ANTHROPIC_API_KEY=sk-ant-...
-GOOGLE_API_KEY=AIza...
-XAI_API_KEY=xai-...
-```
-
-### 3. Configure models (optional)
-
-Edit `backend/config.py` to customize the council. Model identifiers use the format `provider/model-name`:
-
-```python
-COUNCIL_MODELS = [
-    "openai/gpt-5.1",
-    "google/gemini-3-pro-preview",
-    "anthropic/claude-sonnet-4-5",
-    "x-ai/grok-4",
-]
-
-CHAIRMAN_MODEL = "google/gemini-3-pro-preview"
-```
-
-Supported providers: `openai`, `anthropic`, `google`, `x-ai`. OpenAI, Google, and xAI all use OpenAI-compatible endpoints. Anthropic is handled separately via its native Messages API.
-
-## Running
-
-```bash
+# 启动
 ./start.sh
 ```
 
-Then open http://localhost:5173.
+启动后打开前端地址，通常是 `http://localhost:5173`。
 
-## Tech stack
+## 自定义 Council
 
-- **Backend:** FastAPI, async httpx, direct provider APIs
-- **Frontend:** React + Vite, react-markdown
-- **Storage:** JSON files in `data/conversations/`
+所有模型都使用 `provider/model-name` 格式。只需要修改 `backend/config.py`：
 
-## Credit
+```python
+COUNCIL_MODELS = [
+    "deepseek/deepseek-chat",
+    "openai/gpt-4o",
+    "google/gemini-2.5-flash",
+    "qwen/qwen-plus",
+    "glm/glm-4-flash",
+]
 
-Original project by [Andrej Karpathy](https://github.com/karpathy/llm-council). This variant modifies only the API layer.
+CHAIRMAN_MODEL = "deepseek/deepseek-reasoner"
+```
+
+你可以自由增删模型。只要 Provider 已在 `PROVIDERS` 注册，并且 `.env` 中配置了对应 API Key，就可以加入 Council。
+
+如需新增 Provider，在 `PROVIDERS` 中添加一项即可：
+
+```python
+"provider_name": {
+    "base_url": "https://example.com/v1/chat/completions",
+    "api_key": os.getenv("PROVIDER_API_KEY"),
+    "format": "openai",
+}
+```
+
+## 3 阶段审议流程
+
+1. 独立回答：用户问题会并行发送给 `COUNCIL_MODELS` 中的所有模型，每个模型独立给出第一轮答案。
+2. 盲审互评：每个模型会看到匿名化后的其他模型答案，并基于准确性、完整性和洞察力进行排序与评价。
+3. 主席综合：`CHAIRMAN_MODEL` 会读取第一轮答案和互评结果，综合生成最终回答。
+
+## 技术栈
+
+- Backend：FastAPI、async httpx、直接厂商 API
+- Frontend：React、Vite、react-markdown
+- Storage：`data/conversations/` 下的 JSON 文件
+
+## Credits
+
+- 原始项目：[Karpathy/llm-council](https://github.com/karpathy/llm-council)
+- 直连 API 版本：[cyrilleroux/llm-council-direct](https://github.com/cyrilleroux/llm-council-direct)
+- 本项目：在直连架构基础上扩展为支持国内外任意大模型的灵活 LLM Council

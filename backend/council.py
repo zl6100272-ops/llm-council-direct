@@ -274,14 +274,14 @@ Title:"""
 
     messages = [{"role": "user", "content": title_prompt}]
 
-    # Use gemini-2.5-flash for title generation (fast and cheap)
-    response = await query_model("google/gemini-2.5-flash", messages, timeout=30.0)
+    # Use the first configured council model for title generation.
+    response = await query_model(COUNCIL_MODELS[0], messages, timeout=30.0)
 
     if response is None:
         # Fallback to a generic title
-        return "New Conversation"
+        return "Untitled"
 
-    title = response.get('content', 'New Conversation').strip()
+    title = (response.get('content') or 'Untitled').strip()
 
     # Clean up the title - remove quotes, limit length
     title = title.strip('"\'')
